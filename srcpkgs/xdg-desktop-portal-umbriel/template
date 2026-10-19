@@ -18,7 +18,7 @@ maintainer="cwillsey06 <cwillsey06@users.noreply.github.com>"
 license="MIT"
 homepage="https://github.com/noctalia-dev/xdg-desktop-portal-umbriel"
 distfiles="https://github.com/noctalia-dev/xdg-desktop-portal-umbriel/archive/${_commit}.tar.gz"
-checksum=0000000000000000000000000000000000000000000000000000000000000000
+checksum=862e2ae91bbd5408ac67d60803f5445776c77e4c44de2dc435197b895482b141
 
 post_install() {
 	rm -rf ${DESTDIR}/usr/lib/systemd

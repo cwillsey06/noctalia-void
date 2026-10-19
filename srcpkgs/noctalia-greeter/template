@@ -20,7 +20,7 @@ license="MIT, Apache-2.0"
 homepage="https://github.com/noctalia-dev/noctalia-greeter"
 changelog="https://github.com/noctalia-dev/noctalia-greeter/releases"
 distfiles="https://github.com/noctalia-dev/noctalia-greeter/archive/v${version}.tar.gz"
-checksum=0000000000000000000000000000000000000000000000000000000000000000
+checksum=5b092784c0147bb6739efc2e8146d2d07e3572a59d7a370e93092f9f56d4fcc8
 
 # Void's greetd runs the greeter as _greeter (not upstream's assumed 'greeter'),
 # and runit doesn't process tmpfiles.d, so create the state dir here instead.

@@ -24,7 +24,7 @@ license="MIT, Apache-2.0"
 homepage="https://github.com/noctalia-dev/noctalia"
 changelog="https://github.com/noctalia-dev/noctalia/releases"
 distfiles="https://github.com/noctalia-dev/noctalia/archive/v${version}.tar.gz"
-checksum=0000000000000000000000000000000000000000000000000000000000000000
+checksum=7677b5d7da80cf89c7a8232de26d25380aa5fcaf34fb38abddd4fe7cb676161a
 
 # jemalloc is glibc-only upstream
 if [ "$XBPS_TARGET_LIBC" = glibc ]; then

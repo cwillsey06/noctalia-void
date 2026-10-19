@@ -5,8 +5,8 @@
 # so a future real 0.1.0 release still sorts as newer.
 pkgname=umbriel
 version=0.0.20261019
-revision=1
-_commit=68b4c22106dd04482a0646298d59cfdca5759fff
+revision=2
+_commit=7097aeeb80e7b50d22c995b3905ce722e4fdbfaf
 archs="x86_64* aarch64*"
 build_style=meson
 configure_args="--buildtype=release -Dtests=disabled -Dtest_ipc=disabled
@@ -23,7 +23,7 @@ maintainer="cwillsey06 <cwillsey06@users.noreply.github.com>"
 license="MIT"
 homepage="https://github.com/noctalia-dev/umbriel"
 distfiles="https://github.com/noctalia-dev/umbriel/archive/${_commit}.tar.gz"
-checksum=0000000000000000000000000000000000000000000000000000000000000000
+checksum=dd67894eee35245c6e95c08bae0bdf16091cb4e493d1c52b93ff02f43f7b1424
 
 if [ "$XBPS_TARGET_LIBC" = glibc ]; then
 	makedepends+=" jemalloc-devel"
