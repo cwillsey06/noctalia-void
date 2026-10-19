@@ -1,0 +1,165 @@
+name: build
+
+# Daily: cheap check for new Noctalia / Greeter release tags; builds only if found.
+# 1st and 15th of each month: also follow Umbriel's main branch and force a
+# full rebuild (catches Void library updates that would otherwise leave our
+# packages linked against old versions).
+# Manual: Actions tab -> build -> "Run workflow" (tick "force" to rebuild now).
+on:
+  schedule:
+    - cron: '23 4 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Rebuild and republish even if nothing changed'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: repo
+  ARCH: x86_64
+  PKGS: noctalia noctalia-greeter umbriel xdg-desktop-portal-umbriel
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - name: checkout this repo
+        uses: actions/checkout@v4
+        with:
+          path: overlay
+          fetch-depth: 0
+
+      - name: checkout void-packages
+        uses: actions/checkout@v4
+        with:
+          repository: void-linux/void-packages
+          path: void-packages
+          fetch-depth: 1
+
+      - name: install static xbps
+        run: |
+          sudo mkdir -p /opt/xbps
+          curl -fsSL https://repo-default.voidlinux.org/static/xbps-static-latest.x86_64-musl.tar.xz \
+            | sudo tar xJ -C /opt/xbps
+          echo /opt/xbps/usr/bin >> "$GITHUB_PATH"
+
+      - name: prepare build environment
+        run: |
+          # Ubuntu 24.04 blocks unprivileged user namespaces, which xbps-src's
+          # sandbox needs.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          cd void-packages
+          ./xbps-src -A "$ARCH" binary-bootstrap
+
+      - name: decide what to do
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          cd overlay
+          day=$(date -u +%d)
+          periodic=false
+          if [ "$day" = 01 ] || [ "$day" = 15 ]; then periodic=true; fi
+          force=${{ inputs.force == true }}
+          args=(--vp ../void-packages)
+          if $periodic || $force; then args+=(--git); fi
+
+          changed=$(scripts/update.sh "${args[@]}")
+          echo "Changed: ${changed:-none}"
+
+          # First run ever: nothing published yet
+          published=true
+          gh release view "$RELEASE_TAG" >/dev/null 2>&1 || published=false
+
+          build=false
+          if [ -n "$changed" ] || $periodic || $force || ! $published; then build=true; fi
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          { echo 'changed<<EOF'; echo "$changed"; echo EOF; } >> "$GITHUB_OUTPUT"
+
+      - name: build packages
+        if: steps.plan.outputs.build == 'true'
+        run: |
+          for d in overlay/srcpkgs/*/; do
+            rm -rf "void-packages/srcpkgs/$(basename "$d")"
+            cp -r "$d" void-packages/srcpkgs/
+          done
+          cd void-packages
+          for p in $PKGS; do
+            echo "::group::$p"
+            ./xbps-src -j "$(nproc)" pkg "$p"
+            echo "::endgroup::"
+          done
+          ls -lh hostdir/binpkgs
+
+      - name: sign repository
+        if: steps.plan.outputs.build == 'true'
+        working-directory: void-packages/hostdir/binpkgs
+        env:
+          PRIV_KEY: ${{ secrets.PRIV_KEY }}
+          XBPS_PASSPHRASE: ${{ secrets.SIGN_PASS }}
+          SIGNEDBY: ${{ vars.SIGNEDBY }}
+        run: |
+          : "${PRIV_KEY:?PRIV_KEY secret is not set}" "${SIGNEDBY:?SIGNEDBY variable is not set}"
+          key=$(mktemp); trap 'rm -f "$key"' EXIT
+          printf '%s\n' "$PRIV_KEY" > "$key"
+          export XBPS_TARGET_ARCH=$ARCH
+          xbps-rindex -a "$PWD"/*.xbps
+          xbps-rindex -s --signedby "$SIGNEDBY" --privkey "$key" "$PWD"
+          xbps-rindex -S --privkey "$key" "$PWD"/*.xbps
+          ls -1
+
+      - name: publish to GitHub release
+        if: steps.plan.outputs.build == 'true'
+        working-directory: void-packages/hostdir/binpkgs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --title "xbps repository ($ARCH)" \
+              --notes "Add to /etc/xbps.d/: repository=https://github.com/$GH_REPO/releases/download/$RELEASE_TAG"
+          fi
+          # Packages first, index last, so the index never points at missing files
+          gh release upload "$RELEASE_TAG" *.xbps *.xbps.sig2 --clobber
+          gh release upload "$RELEASE_TAG" "$ARCH-repodata" --clobber
+          # Drop superseded package files
+          keep=$(ls -1 *.xbps *.xbps.sig2 "$ARCH-repodata")
+          gh release view "$RELEASE_TAG" --json assets -q '.assets[].name' | while read -r a; do
+            grep -qxF "$a" <<<"$keep" || gh release delete-asset "$RELEASE_TAG" "$a" -y
+          done
+
+      - name: commit template bumps
+        if: steps.plan.outputs.build == 'true' && steps.plan.outputs.changed != ''
+        working-directory: overlay
+        env:
+          CHANGED: ${{ steps.plan.outputs.changed }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add srcpkgs
+          git commit -m "update: $(echo $CHANGED)"
+          git push
+
+      # GitHub pauses scheduled workflows after 60 days without repo activity.
+      - name: keepalive
+        if: always()
+        working-directory: overlay
+        run: |
+          last=$(git log -1 --format=%ct)
+          if [ $(( $(date +%s) - last )) -gt $(( 45 * 86400 )) ]; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git pull --ff-only
+            git commit --allow-empty -m 'keepalive'
+            git push
+          fi

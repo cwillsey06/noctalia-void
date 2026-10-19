@@ -1,0 +1,40 @@
+# Template file for 'umbriel'
+# Upstream publishes no release tags yet, so this tracks a pinned commit of
+# main. CI bumps _commit and the date on its rebuild schedule. Version is
+# 0.0.<date> (no "+": GitHub renames release assets with special characters)
+# so a future real 0.1.0 release still sorts as newer.
+pkgname=umbriel
+version=0.0.20261019
+revision=1
+_commit=68b4c22106dd04482a0646298d59cfdca5759fff
+archs="x86_64* aarch64*"
+build_style=meson
+configure_args="--buildtype=release -Dtests=disabled -Dtest_ipc=disabled
+ -Dtracy=disabled"
+hostmakedepends="pkg-config wayland-devel"
+makedepends="wlroots0.20-devel wayland-devel wayland-protocols libxkbcommon-devel
+ libinput-devel pixman-devel libdrm-devel libdisplay-info-devel
+ eudev-libudev-devel cairo-devel pango-devel tomlplusplus-devel json-c++
+ libxcb-devel xcb-util-wm-devel libglvnd-devel libgbm-devel lcms2-devel"
+# Xwayland is looked up on PATH for X11 clients
+depends="xorg-server-xwayland"
+short_desc="Wayland compositor built on wlroots"
+maintainer="cwillsey06 <cwillsey06@users.noreply.github.com>"
+license="MIT"
+homepage="https://github.com/noctalia-dev/umbriel"
+distfiles="https://github.com/noctalia-dev/umbriel/archive/${_commit}.tar.gz"
+checksum=0000000000000000000000000000000000000000000000000000000000000000
+
+if [ "$XBPS_TARGET_LIBC" = glibc ]; then
+	makedepends+=" jemalloc-devel"
+	configure_args+=" -Djemalloc=enabled"
+else
+	configure_args+=" -Djemalloc=disabled"
+fi
+
+post_install() {
+	# systemd user units are unused on Void; start-umbriel falls back to a
+	# direct launch when no systemd user manager is reachable.
+	rm -rf ${DESTDIR}/usr/lib/systemd
+	vlicense LICENSE
+}

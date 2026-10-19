@@ -1,0 +1,56 @@
+# Template file for 'noctalia'
+pkgname=noctalia
+version=5.3.0
+revision=1
+archs="x86_64* aarch64*"
+build_style=meson
+# Upstream wants a release build: 'plain' turns on _GLIBCXX_ASSERTIONS, which
+# upstream deliberately keeps out of release so a bad clamp can't abort the session.
+# native_optimizations must stay off for distributable packages.
+configure_args="--buildtype=release -Dtests=disabled -Dnative_optimizations=false"
+hostmakedepends="pkg-config wayland-devel"
+makedepends="wayland-devel wayland-protocols libglvnd-devel libepoxy-devel
+ freetype-devel fontconfig-devel cairo-devel pango-devel harfbuzz-devel
+ librsvg-devel libxkbcommon-devel glib-devel libsecret-devel libsodium-devel
+ polkit-devel pipewire-devel wireplumber-devel sdbus-c++-devel libcurl-devel
+ libqalculate-devel libxml2-devel libmd4c-devel json-c++ tomlplusplus-devel
+ libical-devel pam-devel stb libwebp-devel libjxl-devel libsndfile-devel"
+# Shared libraries are picked up automatically; these are the non-library
+# runtime pieces PACKAGING.md lists (git for plugins, sounds, audio stack).
+depends="git sound-theme-freedesktop wireplumber"
+short_desc="Sleek, customizable desktop shell crafted for Wayland"
+maintainer="cwillsey06 <cwillsey06@users.noreply.github.com>"
+license="MIT, Apache-2.0"
+homepage="https://github.com/noctalia-dev/noctalia"
+changelog="https://github.com/noctalia-dev/noctalia/releases"
+distfiles="https://github.com/noctalia-dev/noctalia/archive/v${version}.tar.gz"
+checksum=0000000000000000000000000000000000000000000000000000000000000000
+
+# jemalloc is glibc-only upstream
+if [ "$XBPS_TARGET_LIBC" = glibc ]; then
+	makedepends+=" jemalloc-devel"
+	configure_args+=" -Djemalloc=enabled"
+else
+	configure_args+=" -Djemalloc=disabled"
+fi
+
+post_install() {
+	vlicense LICENSE
+
+	# Vendored third-party code (no system packages in Void): ship their licenses
+	vlicense third_party/fzy/LICENSE fzy-LICENSE
+	vlicense third_party/luau/LICENSE.txt luau-LICENSE
+	vlicense third_party/luau/lua_LICENSE.txt luau-lua-LICENSE
+	vlicense third_party/material_color_utilities/LICENSE material-color-utilities-LICENSE
+	vlicense third_party/wuffs/LICENSE-MIT wuffs-LICENSE-MIT
+	vlicense third_party/wuffs/LICENSE-APACHE wuffs-LICENSE-APACHE
+
+	# Upstream doesn't ship completion files; generate them from the built
+	# binary. Running the target binary only works for native builds.
+	if [ -z "$CROSS_BUILD" ]; then
+		for _sh in bash zsh fish; do
+			build/noctalia completions ${_sh} > noctalia.${_sh}
+			vcompletion noctalia.${_sh} ${_sh}
+		done
+	fi
+}

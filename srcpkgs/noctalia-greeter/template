@@ -1,0 +1,39 @@
+# Template file for 'noctalia-greeter'
+pkgname=noctalia-greeter
+version=1.7.0
+revision=1
+build_style=meson
+# Keep Void's default 'plain' buildtype: upstream's 'release' adds -march=native,
+# which would make the package only run on CPUs like the build machine's.
+hostmakedepends="pkg-config wayland-devel"
+makedepends="wayland-devel wayland-protocols wlroots0.20-devel libinput-devel
+ libxkbcommon-devel libglvnd-devel libepoxy-devel freetype-devel
+ fontconfig-devel cairo-devel pango-devel librsvg-devel libxml2-devel
+ glib-devel json-c++ tomlplusplus-devel stb libwebp-devel libjxl-devel"
+# greetd runs us; dbus provides dbus-run-session for the session wrapper;
+# the installed setup scripts are bash. polkit (pkexec) is optional: only
+# needed for appearance sync with Noctalia.
+depends="greetd dbus bash"
+short_desc="Minimal login greeter for greetd that matches Noctalia Shell"
+maintainer="cwillsey06 <cwillsey06@users.noreply.github.com>"
+license="MIT, Apache-2.0"
+homepage="https://github.com/noctalia-dev/noctalia-greeter"
+changelog="https://github.com/noctalia-dev/noctalia-greeter/releases"
+distfiles="https://github.com/noctalia-dev/noctalia-greeter/archive/v${version}.tar.gz"
+checksum=0000000000000000000000000000000000000000000000000000000000000000
+
+# Void's greetd runs the greeter as _greeter (not upstream's assumed 'greeter'),
+# and runit doesn't process tmpfiles.d, so create the state dir here instead.
+make_dirs="/var/lib/noctalia-greeter 0750 _greeter _greeter"
+
+post_install() {
+	# Hardcodes greeter:greeter and would be ignored on runit anyway
+	rm -rf ${DESTDIR}/usr/lib/tmpfiles.d
+
+	vlicense LICENSE
+	# Bundled Wuffs (Apache-2.0 OR MIT); upstream tarball omits its license texts
+	vlicense ${FILESDIR}/wuffs/LICENSE-MIT wuffs-LICENSE-MIT
+	vlicense ${FILESDIR}/wuffs/LICENSE-APACHE wuffs-LICENSE-APACHE
+
+	vdoc ${FILESDIR}/README.voidlinux
+}
