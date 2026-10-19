@@ -33,13 +33,13 @@ jobs:
     timeout-minutes: 300
     steps:
       - name: checkout this repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: overlay
           fetch-depth: 0
 
       - name: checkout void-packages
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: void-linux/void-packages
           path: void-packages
