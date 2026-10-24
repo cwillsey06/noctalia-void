@@ -19,24 +19,6 @@ Noctalia Greeter on Void Linux
 
 	ln -s /etc/sv/greetd /var/service/
 
-Session runtime directory (elogind)
------------------------------------
-Wayland sessions need XDG_RUNTIME_DIR (/run/user/<uid>). Noctalia's
-appearance sync also requires it.
-
-* With elogind (most desktop setups): install elogind, enable the dbus and
-  elogind services, and make sure /etc/pam.d/greetd includes a session
-  line for pam_elogind.so. Void's default greetd PAM file includes
-  system-local-login, which pulls it in when elogind is installed.
-
-* Without elogind: something else must create XDG_RUNTIME_DIR, e.g.
-  pam_rundir (package "pam_rundir") added to /etc/pam.d/greetd as
-  "session optional pam_rundir.so", or seatd + turnstile. Appearance sync
-  with Noctalia will not work without a /run/user/<uid> directory.
-
-Do NOT run /usr/share/noctalia-greeter/setup_greeter_system.sh blindly:
-it edits /etc/pam.d/greetd directly. Steps 1-2 above cover what Void needs.
-
 Optional: appearance sync with Noctalia
 ---------------------------------------
 Needs polkit (provides pkexec):
