@@ -1,17 +1,37 @@
 name: build
 
-# Daily: cheap check for new Noctalia / Greeter release tags; builds only if found.
+# Daily: cheap check for new Noctalia / Greeter release tags; rebuilds only the
+# packages that got a new version (the rest are carried over from the release).
 # 1st and 15th of each month: also follow Umbriel's main branch and force a
 # full rebuild (catches Void library updates that would otherwise leave our
 # packages linked against old versions).
-# Manual: Actions tab -> build -> "Run workflow" (tick "force" to rebuild now).
+# Manual: Actions tab -> build -> "Run workflow". Tick "force" to rebuild
+# everything, or tick individual packages to rebuild just those (snapshot
+# packages also move to the latest upstream commit, like on the 1st/15th).
 on:
   schedule:
     - cron: '23 4 * * *'
   workflow_dispatch:
     inputs:
       force:
-        description: 'Rebuild and republish even if nothing changed'
+        description: 'Rebuild and republish ALL packages'
+        type: boolean
+        default: false
+      # Keep these in sync with PKGS below; the input id must be the pkgname.
+      noctalia:
+        description: 'Rebuild noctalia'
+        type: boolean
+        default: false
+      noctalia-greeter:
+        description: 'Rebuild noctalia-greeter'
+        type: boolean
+        default: false
+      umbriel:
+        description: 'Rebuild umbriel (follows latest main)'
+        type: boolean
+        default: false
+      xdg-desktop-portal-umbriel:
+        description: 'Rebuild xdg-desktop-portal-umbriel (follows latest main)'
         type: boolean
         default: false
 
@@ -65,36 +85,89 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          INPUTS: ${{ toJSON(inputs) }}
         run: |
           cd overlay
           day=$(date -u +%d)
           periodic=false
           if [ "$day" = 01 ] || [ "$day" = 15 ]; then periodic=true; fi
           force=${{ inputs.force == true }}
-          args=(--vp ../void-packages)
-          if $periodic || $force; then args+=(--git); fi
 
-          changed=$(scripts/update.sh "${args[@]}")
+          # Packages ticked individually in the "Run workflow" form
+          selected=()
+          for p in $PKGS; do
+            if [ "$(jq -r --arg p "$p" '.[$p] // false' <<<"$INPUTS")" = true ]; then
+              selected+=("$p")
+            fi
+          done
+          echo "Selected: ${selected[*]:-none}"
+
+          if $periodic || $force; then
+            changed=$(scripts/update.sh --vp ../void-packages --git)
+          else
+            changed=$(scripts/update.sh --vp ../void-packages)
+            if [ ${#selected[@]} -gt 0 ]; then
+              # Ticked snapshot packages follow upstream main, like a periodic run
+              changed+=$'\n'$(scripts/update.sh --vp ../void-packages --git "${selected[@]}")
+            fi
+          fi
+          changed=$(printf '%s\n' "$changed" | sed '/^$/d' | sort -u)
           echo "Changed: ${changed:-none}"
 
           # First run ever: nothing published yet
           published=true
           gh release view "$RELEASE_TAG" >/dev/null 2>&1 || published=false
 
+          if $periodic || $force || ! $published; then
+            pkgs=$PKGS
+            partial=false
+          else
+            # Only what changed or was ticked; the rest is carried over
+            pkgs=$(printf '%s\n' $changed "${selected[@]}" | sort -u | xargs)
+            partial=true
+          fi
           build=false
-          if [ -n "$changed" ] || $periodic || $force || ! $published; then build=true; fi
+          if [ -n "$pkgs" ]; then build=true; fi
+          echo "Building: ${pkgs:-nothing}"
           echo "build=$build" >> "$GITHUB_OUTPUT"
+          echo "pkgs=$pkgs" >> "$GITHUB_OUTPUT"
+          echo "partial=$partial" >> "$GITHUB_OUTPUT"
           { echo 'changed<<EOF'; echo "$changed"; echo EOF; } >> "$GITHUB_OUTPUT"
+
+      # Publishing replaces the whole repository index and drops release assets
+      # that aren't in binpkgs, so on a partial build pull in the current
+      # packages for everything we're NOT rebuilding.
+      - name: fetch unchanged packages from release
+        if: steps.plan.outputs.build == 'true' && steps.plan.outputs.partial == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BUILD_PKGS: ${{ steps.plan.outputs.pkgs }}
+        run: |
+          mkdir -p void-packages/hostdir/binpkgs
+          cd void-packages/hostdir/binpkgs
+          gh release view "$RELEASE_TAG" --json assets -q '.assets[].name' | while read -r a; do
+            case $a in *."$ARCH".xbps|*."$ARCH".xbps.sig2) ;; *) continue ;; esac
+            name=$(xbps-uhelper getpkgname "${a%."$ARCH".xbps*}")
+            # Skip packages being rebuilt, and ones no longer in PKGS
+            if grep -qxF "$name" < <(printf '%s\n' $BUILD_PKGS); then continue; fi
+            grep -qxF "$name" < <(printf '%s\n' $PKGS) || continue
+            echo "carrying over $a"
+            gh release download "$RELEASE_TAG" -p "$a" --clobber
+          done
+          ls -lh
 
       - name: build packages
         if: steps.plan.outputs.build == 'true'
+        env:
+          BUILD_PKGS: ${{ steps.plan.outputs.pkgs }}
         run: |
           for d in overlay/srcpkgs/*/; do
             rm -rf "void-packages/srcpkgs/$(basename "$d")"
             cp -r "$d" void-packages/srcpkgs/
           done
           cd void-packages
-          for p in $PKGS; do
+          for p in $BUILD_PKGS; do
             echo "::group::$p"
             ./xbps-src -j "$(nproc)" pkg "$p"
             echo "::endgroup::"
