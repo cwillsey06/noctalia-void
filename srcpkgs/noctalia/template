@@ -1,6 +1,6 @@
 # Template file for 'noctalia'
 pkgname=noctalia
-version=5.4.1
+version=5.5.0
 revision=1
 archs="x86_64* aarch64*"
 build_style=meson
@@ -24,7 +24,7 @@ license="MIT, Apache-2.0"
 homepage="https://github.com/noctalia-dev/noctalia"
 changelog="https://github.com/noctalia-dev/noctalia/releases"
 distfiles="https://github.com/noctalia-dev/noctalia/archive/v${version}.tar.gz"
-checksum=6069d922e9d72488c74e4ce335314ce2203f08bd4641380bfe1bd137004597fa
+checksum=f3fe8a1f1d4306280413e04f934400b787dba212d296d97dfd638bcb55c78262
 
 # jemalloc is glibc-only upstream
 if [ "$XBPS_TARGET_LIBC" = glibc ]; then
@@ -42,8 +42,8 @@ post_install() {
 	vlicense third_party/luau/LICENSE.txt luau-LICENSE
 	vlicense third_party/luau/lua_LICENSE.txt luau-lua-LICENSE
 	vlicense third_party/material_color_utilities/LICENSE material-color-utilities-LICENSE
-	vlicense third_party/wuffs/LICENSE-MIT wuffs-LICENSE-MIT
-	vlicense third_party/wuffs/LICENSE-APACHE wuffs-LICENSE-APACHE
+	vlicense lib/third_party/wuffs/LICENSE-MIT wuffs-LICENSE-MIT
+	vlicense lib/third_party/wuffs/LICENSE-APACHE wuffs-LICENSE-APACHE
 
 	# Upstream doesn't ship completion files; generate them from the built
 	# binary. Running the target binary only works for native builds.
